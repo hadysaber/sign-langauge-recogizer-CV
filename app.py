@@ -11,7 +11,8 @@ from pathlib import Path
 from src.config import ACTIONS, MODEL_PATH, CONFIDENCE_THRESHOLD, SEQUENCE_LENGTH
 from src.extract import mp_holistic, mediapipe_detection, extract_keypoints
 from src.model import create_lstm_model
-from src.ui import draw_styled_landmarks, draw_inference_overlay
+from src.ui import draw_styled_landmarks, draw_presentation_overlay
+from src.smoothing import PredictionSmoother
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
@@ -28,22 +29,30 @@ def on_screen_prediction() -> None:
     else:
         logging.warning(f"File not found at '{MODEL_PATH}'. Running with uninitialized random weights.")
         
-    # 2. Setup Temporal Buffer
-    # Automatically manages memory by dropping the oldest frame
+    # 2. Setup Temporal Buffers & State Mechanics
     sequence = deque(maxlen=SEQUENCE_LENGTH) 
+    smoother = PredictionSmoother(window_size=5)
     
+    current_action = ""
+    confidence = 0.0
+    status_text = "Waiting for sequence..."
+    smoothing_active = True
+
     # 3. Setup Hardware Interface
     cap = cv2.VideoCapture(0)
+    # Give the app a 16:9 widescreen rendering baseline if supported by hardware
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     if not cap.isOpened():
         logging.error("Failed to grab physical webcam frame. Check your camera driver.")
         return
-    
-    current_action = "Waiting..."
-    confidence = 0.0
-
+        
     logging.info("Opening Webcam... Press 'q' to quit.")
+    
     with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
         while cap.isOpened():
+            start_tick = cv2.getTickCount()
+            
             ret, frame = cap.read()
             if not ret:
                 logging.warning("Dropped frame. Skipping...")
@@ -51,33 +60,63 @@ def on_screen_prediction() -> None:
                 
             # Computer Vision feature extraction
             image, results = mediapipe_detection(frame, holistic)
-            
-            # Isolated UI abstraction
             draw_styled_landmarks(image, results)
             
-            # Format and Buffer keypoints
-            keypoints = extract_keypoints(results)
-            sequence.append(keypoints)
+            # Logic: Hands check (Core upgrade for stability)
+            has_hands = bool(results.left_hand_landmarks or results.right_hand_landmarks)
             
-            # Predict only if we have a full buffer sequence
-            if len(sequence) == SEQUENCE_LENGTH:
-                # Shape context: (1, 30, 258)
-                res = model.predict(np.expand_dims(list(sequence), axis=0), verbose=0)[0]
-                prediction_idx = int(np.argmax(res))
-                
-                # Filter by system confidence threshold
-                if res[prediction_idx] > CONFIDENCE_THRESHOLD:
-                    current_action = ACTIONS[prediction_idx]
-                    confidence = float(res[prediction_idx])
+            if not has_hands:
+                status_text = "No hands detected"
+                sequence.clear()
+            else:
+                # Format and Buffer keypoints
+                keypoints = extract_keypoints(results)
+                sequence.append(keypoints)
+
+                if len(sequence) < SEQUENCE_LENGTH:
+                    status_text = "Waiting for sequence..."
+                else:
+                    status_text = "Predicting"
+                    
+                    # Shape context: (1, 30, 258)
+                    res = model.predict(np.expand_dims(list(sequence), axis=0), verbose=0)[0]
+                    prediction_idx = int(np.argmax(res))
+                    
+                    if res[prediction_idx] > CONFIDENCE_THRESHOLD:
+                        raw_action = ACTIONS[prediction_idx]
+                        confidence = float(res[prediction_idx])
+                        
+                        # Apply consensus smoothing
+                        if smoothing_active:
+                            smoother.add_prediction(raw_action)
+                            stable_action = smoother.get_stable_prediction()
+                            if stable_action:
+                                current_action = stable_action
+                        else:
+                            current_action = raw_action
+                            
+            # Calculate metrics
+            fps = int(cv2.getTickFrequency() / (cv2.getTickCount() - start_tick))
             
-            # Render UI overlay via abstraction
-            draw_inference_overlay(image, current_action, confidence)
+            # Render full graduation-demo UI
+            draw_presentation_overlay(image, status_text, current_action, confidence, fps, smoothing_active)
             
             cv2.imshow('Sign Language AI Inference Core', image)
             
-            if cv2.waitKey(10) & 0xFF == ord('q'):
+            # Interactive Keyboard Listeners
+            key = cv2.waitKey(10) & 0xFF
+            if key == ord('q'):
                 logging.info("Inference shutdown triggered by user.")
                 break
+            elif key == ord('r'):
+                logging.info("User forced sequence reset.")
+                sequence.clear()
+                smoother.reset()
+                current_action = ""
+            elif key == ord('s'):
+                smoothing_active = not smoothing_active
+                logging.info(f"Smoothing toggled to: {smoothing_active}")
+                smoother.reset()
                 
     cap.release()
     cv2.destroyAllWindows()

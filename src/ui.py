@@ -16,12 +16,7 @@ mp_drawing: Any = mp.solutions.drawing_utils
 def draw_styled_landmarks(image: np.ndarray, results: Any) -> None:
     """
     Draws holistic landmarks with custom styling directly onto the image.
-    
-    Args:
-        image (np.ndarray): The OpenCV frame.
-        results (Any): The MediaPipe results.
     """
-    # Draw pose connections
     if results.pose_landmarks:
         mp_drawing.draw_landmarks(
             image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS,
@@ -29,7 +24,6 @@ def draw_styled_landmarks(image: np.ndarray, results: Any) -> None:
             mp_drawing.DrawingSpec(color=(80, 44, 121), thickness=2, circle_radius=2)
         )
         
-    # Draw left hand connections
     if results.left_hand_landmarks:
         mp_drawing.draw_landmarks(
             image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
@@ -37,7 +31,6 @@ def draw_styled_landmarks(image: np.ndarray, results: Any) -> None:
             mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
         )
         
-    # Draw right hand connections
     if results.right_hand_landmarks:
         mp_drawing.draw_landmarks(
             image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
@@ -48,12 +41,6 @@ def draw_styled_landmarks(image: np.ndarray, results: Any) -> None:
 def draw_collection_header(image: np.ndarray, action: str, sequence: int, is_starting: bool = False) -> None:
     """
     Draws the header banner for the data collection script.
-    
-    Args:
-        image (np.ndarray): The OpenCV frame.
-        action (str): The current action being tracked.
-        sequence (int): The current sequence number.
-        is_starting (bool): Flag indicating if the sequence is just beginning (will wait).
     """
     if is_starting:
         cv2.putText(
@@ -66,21 +53,55 @@ def draw_collection_header(image: np.ndarray, action: str, sequence: int, is_sta
         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 1, cv2.LINE_AA
     )
 
-def draw_inference_overlay(image: np.ndarray, action: str, confidence: float) -> None:
+def draw_presentation_overlay(
+    image: np.ndarray, 
+    status_text: str, 
+    action: str, 
+    confidence: float, 
+    fps: int,
+    smoothing_active: bool
+) -> None:
     """
-    Draws the real-time inference prediction bar at the top of the frame.
+    Renders a comprehensive, graduation-ready demo UI over the frame.
     
     Args:
-        image (np.ndarray): The OpenCV frame.
-        action (str): The predicted action string.
-        confidence (float): Probability score (0.0 to 1.0).
+        image (np.ndarray): Target image canvas.
+        status_text (str): Top level state e.g., 'Waiting for sequence...', 'No hands detected'.
+        action (str): The current predicted sign language action.
+        confidence (float): Probability score.
+        fps (int): Frame rate integer.
+        smoothing_active (bool): Indicator if consensus logic is active.
     """
-    # Base dark banner
-    cv2.rectangle(image, (0, 0), (640, 50), (28, 28, 28), -1) 
+    # Base styling rectangles
+    cv2.rectangle(image, (0, 0), (640, 80), (35, 35, 35), -1) 
     
-    # Output rendering
-    text_str = f"Sign: {action.upper()} | Conf: {confidence * 100:.1f}%"
-    cv2.putText(
-        image, text_str, (10, 35), 
-        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA
-    )
+    # 1. Determine Status Color (Red for warning, yellow for wait, green for active)
+    status_color = (0, 255, 0)
+    if "No hands" in status_text:
+        status_color = (50, 50, 255) # Light Red
+    elif "Waiting" in status_text:
+        status_color = (0, 200, 255) # Yellow
+        
+    # Draw Status
+    cv2.putText(image, f"Status: {status_text}", (10, 25), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2, cv2.LINE_AA)
+                
+    # 2. Draw Prediction and Confidence if we are active
+    if "Predicting" in status_text and action and action != "Waiting...":
+        text_str = f"Sign: {action.upper()}  |  Conf: {confidence * 100:.1f}%"
+        cv2.putText(image, text_str, (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+    else:
+        cv2.putText(image, "Sign: ---", (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (150, 150, 150), 2, cv2.LINE_AA)
+        
+    # 3. Draw Engine Metrics (FPS and Smoothing)
+    cv2.putText(image, f"FPS: {fps}", (520, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
+    smooth_color = (0, 255, 0) if smoothing_active else (100, 100, 100)
+    cv2.putText(image, f"SMOOTH: {'ON' if smoothing_active else 'OFF'}", (520, 50), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, smooth_color, 1, cv2.LINE_AA)
+    
+    # 4. Draw Command Help Footer
+    h, w, _ = image.shape
+    help_str = "Press: [q] Quit  |  [r] Reset Buffer  |  [s] Toggle Smoothing"
+    cv2.rectangle(image, (0, h-30), (w, h), (20, 20, 20), -1)
+    cv2.putText(image, help_str, (10, h-10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
+
