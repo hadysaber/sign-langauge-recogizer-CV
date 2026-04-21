@@ -1,6 +1,6 @@
 # Real-Time Sign Language Recognition System
 
-A production-quality, minimal real-time sign language recognition system using MediaPipe and TensorFlow. 
+A production-quality, minimal real-time sign language recognition system using MediaPipe and TensorFlow.
 
 ## Setup
 
@@ -10,22 +10,98 @@ A production-quality, minimal real-time sign language recognition system using M
    pip install -r requirements.txt
    ```
 
-## Usage
+## Workflow
 
 ### 1. Data Collection
-To train the model on new gestures, run the data collection script. It will activate the webcam and prompt you to perform gestures to record frame sequences.
+Activate the webcam and record gesture sequences for each sign class.
 ```bash
 python src/data_collection.py
 ```
+- Captures 30 sequences × 30 frames per action.
+- Saved as `.npy` keypoint arrays in `data/extracted/<action>/<sequence>/`.
 
 ### 2. Training
-After gathering the dataset, train the LSTM model.
+Train the LSTM model on the collected data.
 ```bash
 python src/train.py
 ```
 
-### 3. Real-Time Inference
-Start the main application to recognize signs in real-time.
+#### Training Outputs
+| Artifact | Path | Description |
+|---|---|---|
+| Final model | `models/sign_model.keras` | Model saved after training completes |
+| Best model | `models/sign_model_best.keras` | Checkpoint with highest validation accuracy |
+| Label mapping | `models/label_mapping.json` | `{action: index}` used during training |
+| Training history | `reports/training_history.json` | Epoch-by-epoch loss and accuracy |
+| Accuracy plot | `reports/plots/accuracy.png` | Train vs. validation accuracy curves |
+| Loss plot | `reports/plots/loss.png` | Train vs. validation loss curves |
+| TensorBoard logs | `models/Logs/` | Viewable with `tensorboard --logdir models/Logs` |
+
+#### Configuration
+Edit `src/config.py` to tune hyperparameters before training:
+```python
+EPOCHS = 250           # maximum training epochs
+BATCH_SIZE = 16        # samples per gradient update
+LEARNING_RATE = 0.001  # Adam optimizer learning rate
+TEST_SIZE = 0.10       # fraction held out for testing
+ES_PATIENCE = 15       # early-stopping patience (epochs)
+```
+
+### 3. Evaluation
+Run the standalone evaluation script after training to generate metrics and visualizations.
+```bash
+python src/evaluate.py
+```
+
+#### Evaluation Outputs
+| Artifact | Path | Description |
+|---|---|---|
+| Confusion matrix | `reports/plots/confusion_matrix.png` | Heatmap of true vs. predicted labels |
+| Metrics summary | `reports/metrics/evaluation_results.json` | Accuracy, per-class precision/recall/F1 |
+
+#### How to Interpret Results
+- **Accuracy** — overall percentage of correctly classified test sequences.
+- **Precision** — of all sequences predicted as class X, how many were actually X.
+- **Recall** — of all actual class X sequences, how many were correctly predicted.
+- **F1-Score** — harmonic mean of precision and recall (balanced metric).
+- **Confusion Matrix** — rows are true labels, columns are predictions. Diagonal = correct.
+
+### 4. Real-Time Inference
+Start the main application to recognize signs in real-time via webcam.
 ```bash
 python app.py
+```
+- Press **q** to quit, **r** to reset the buffer, **s** to toggle prediction smoothing.
+
+## Project Structure
+```
+sign-language-project/
+├── app.py                      # Real-time webcam inference
+├── requirements.txt            # Python dependencies
+├── src/
+│   ├── config.py               # All paths, hyperparams, and constants
+│   ├── data_collection.py      # Webcam data capture
+│   ├── dataset.py              # Data loading and preprocessing
+│   ├── evaluate.py             # Standalone evaluation script
+│   ├── extract.py              # MediaPipe landmark extraction
+│   ├── model.py                # LSTM model architecture
+│   ├── smoothing.py            # Prediction consensus smoother
+│   ├── train.py                # Training orchestrator
+│   └── ui.py                   # OpenCV UI overlay rendering
+├── data/
+│   ├── raw/                    # (reserved for raw video)
+│   └── extracted/              # Keypoint .npy files per action
+├── models/
+│   ├── sign_model.keras        # Final trained model
+│   ├── sign_model_best.keras   # Best validation checkpoint
+│   ├── label_mapping.json      # Class label ↔ index mapping
+│   └── Logs/                   # TensorBoard logs
+└── reports/
+    ├── training_history.json   # Epoch-level metrics
+    ├── plots/
+    │   ├── accuracy.png        # Accuracy curves
+    │   ├── loss.png            # Loss curves
+    │   └── confusion_matrix.png
+    └── metrics/
+        └── evaluation_results.json
 ```
