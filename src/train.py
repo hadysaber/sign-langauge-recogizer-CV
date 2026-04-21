@@ -6,9 +6,17 @@ import sys
 import logging
 from pathlib import Path
 
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
+try:
+    import tensorflow as tf
+    from tensorflow.keras.callbacks import TensorBoard, EarlyStopping
+except ImportError as e:
+    logging.error(f"Missing critical dependency: {e.name}. Please ensure you run 'pip install -r requirements.txt'")
+    sys.exit(1)
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from tensorflow.keras.callbacks import TensorBoard, EarlyStopping
 from src.dataset import load_data
 from src.model import create_lstm_model
 from src.config import MODEL_PATH

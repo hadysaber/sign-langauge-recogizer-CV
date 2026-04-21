@@ -2,9 +2,20 @@
 Real-time Sign Language Recognition Interface
 """
 
-import cv2
-import numpy as np
+import sys
 import logging
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
+try:
+    import cv2
+    import numpy as np
+    import mediapipe as mp
+    import tensorflow as tf
+except ImportError as e:
+    logging.error(f"Missing critical dependency: {e.name}. Please ensure you run 'pip install -r requirements.txt'")
+    sys.exit(1)
+
 from collections import deque
 from pathlib import Path
 
