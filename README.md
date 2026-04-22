@@ -73,6 +73,13 @@ python app.py
 ```
 - Press **q** to quit, **r** to reset the buffer, **s** to toggle prediction smoothing.
 
+### 5. Reset Project
+To wipe all collected data, trained models, and generated reports before starting fresh:
+```bash
+python src/reset_project.py
+```
+The script will show exactly what will be deleted and ask for confirmation before proceeding. After reset, all required empty directories are recreated automatically.
+
 ## Project Structure
 ```
 sign-language-project/
@@ -85,6 +92,7 @@ sign-language-project/
 │   ├── evaluate.py             # Standalone evaluation script
 │   ├── extract.py              # MediaPipe landmark extraction
 │   ├── model.py                # LSTM model architecture
+│   ├── reset_project.py        # Project reset utility
 │   ├── smoothing.py            # Prediction consensus smoother
 │   ├── train.py                # Training orchestrator
 │   └── ui.py                   # OpenCV UI overlay rendering
