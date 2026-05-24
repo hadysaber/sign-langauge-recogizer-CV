@@ -20,6 +20,14 @@ python src/data_collection.py
 - Captures 30 sequences × 30 frames per action.
 - Saved as `.npy` keypoint arrays in `data/extracted/<action>/<sequence>/`.
 
+#### Tips for Better Accuracy
+- **Minimum 30 sequences per class** — 40+ is recommended for stable results.
+- **Consistent lighting and background** — avoid drastic changes between sessions.
+- **Vary hand position slightly** between sequences so the model generalizes.
+- **Keep your hands clearly visible** — the model relies on hand landmarks above all.
+- **Avoid signs that look identical at the start** — the LSTM needs distinguishable motion.
+- **Damaged sequences** (>25% missing frames) are automatically skipped during training.
+
 ### 2. Training
 Train the LSTM model on the collected data.
 ```bash
@@ -79,6 +87,27 @@ To wipe all collected data, trained models, and generated reports before startin
 python src/reset_project.py
 ```
 The script will show exactly what will be deleted and ask for confirmation before proceeding. After reset, all required empty directories are recreated automatically.
+
+## Extending the Vocabulary
+
+To add new sign labels to the system:
+
+1. **Edit `src/config.py`** — append your new labels to the `ACTIONS` list:
+   ```python
+   ACTIONS: List[str] = [
+       'hello', 'thanks', 'iloveyou',
+       'my_name_is', 'hady', 'i_am_from', 'egypt',
+       'your_new_sign'  # ← add here
+   ]
+   ```
+
+2. **Collect data for ALL classes** — run `python src/data_collection.py`. The script automatically creates folders for every label in `ACTIONS`.
+
+3. **Retrain the model** — run `python src/train.py`. The LSTM output layer dynamically sizes itself to `len(ACTIONS)`, so no architecture changes are needed.
+
+4. **Evaluate** — run `python src/evaluate.py` to verify performance on the new class set.
+
+> **Why full retraining?** The model's output layer and label mapping are tied to the exact `ACTIONS` list. Changing `ACTIONS` without retraining will cause a shape mismatch. The inference script (`app.py`) will warn you if the saved label mapping doesn't match the current `ACTIONS`.
 
 ## Project Structure
 ```

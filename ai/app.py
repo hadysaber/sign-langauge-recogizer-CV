@@ -16,10 +16,11 @@ except ImportError as e:
     logging.error(f"Missing critical dependency: {e.name}. Please ensure you run 'pip install -r requirements.txt'")
     sys.exit(1)
 
+import json
 from collections import deque
 from pathlib import Path
 
-from src.config import ACTIONS, MODEL_PATH, CONFIDENCE_THRESHOLD, SEQUENCE_LENGTH
+from src.config import ACTIONS, MODEL_PATH, CONFIDENCE_THRESHOLD, SEQUENCE_LENGTH, LABEL_MAP_PATH
 from src.extract import mp_holistic, mediapipe_detection, extract_keypoints
 from src.model import create_lstm_model
 from src.ui import draw_styled_landmarks, draw_presentation_overlay
@@ -32,11 +33,31 @@ def on_screen_prediction() -> None:
     Initializes the hardware webcam interface, loads the LSTM sequence weights, 
     and handles the main real-time inference loop safely.
     """
-    # 1. Initialize and Load LSTM Model
+    # 1. Validate Label Mapping
+    if LABEL_MAP_PATH.exists():
+        with open(LABEL_MAP_PATH, 'r') as f:
+            saved_labels = list(json.load(f).keys())
+        if saved_labels != ACTIONS:
+            logging.warning(
+                f"Label mapping mismatch! "
+                f"Saved labels: {saved_labels} vs Current ACTIONS: {ACTIONS}. "
+                f"Retrain the model with 'python src/train.py' to fix this."
+            )
+    else:
+        logging.info("No label mapping found — model has not been trained yet.")
+
+    # 2. Initialize and Load LSTM Model
     model = create_lstm_model()
     if Path(MODEL_PATH).exists():
-        model.load_weights(str(MODEL_PATH))
-        logging.info("Model loaded successfully.")
+        try:
+            model.load_weights(str(MODEL_PATH))
+            logging.info("Model loaded successfully.")
+        except ValueError as e:
+            logging.error(
+                f"Model weight mismatch (likely different number of classes): {e}. "
+                f"Retrain with 'python src/train.py'."
+            )
+            return
     else:
         logging.warning(f"File not found at '{MODEL_PATH}'. Running with uninitialized random weights.")
         

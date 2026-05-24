@@ -35,8 +35,12 @@ for _path in [RAW_DATA_DIR, EXTRACTED_DATA_DIR, MODEL_DIR, LOG_DIR,
 # ──────────────────────────────────────────────
 # Application / Inference Parameters
 # ──────────────────────────────────────────────
-ACTIONS: List[str] = ['hello', 'thanks', 'iloveyou']
+ACTIONS: List[str] = [
+    'hello', 'thanks', 'iloveyou',
+    'my_name_is', 'hady', 'i_am_from', 'egypt'
+]
 CONFIDENCE_THRESHOLD: float = 0.70
+RANDOM_SEED: int = 42
 
 # ──────────────────────────────────────────────
 # Training Hyperparameters (edit these for experiments)
@@ -44,14 +48,18 @@ CONFIDENCE_THRESHOLD: float = 0.70
 EPOCHS: int = 250
 BATCH_SIZE: int = 16
 LEARNING_RATE: float = 0.001
-TEST_SIZE: float = 0.10        # fraction held out for validation / evaluation
+VALIDATION_SIZE: float = 0.15  # fraction used for early stopping / checkpointing
+TEST_SIZE: float = 0.15        # final untouched evaluation fraction
 ES_PATIENCE: int = 15          # early-stopping patience (epochs)
+LR_PATIENCE: int = 6           # reduce learning rate after stagnant validation loss
 
 # ──────────────────────────────────────────────
 # Video / Sequence Configuration
 # ──────────────────────────────────────────────
 SEQUENCE_LENGTH: int = 30      # 30 frames of sequence buffer
-NO_SEQUENCES: int = 30         # how many videos to collect per action
+NO_SEQUENCES: int = 30         # videos per action (recommend 40+ for better accuracy)
+MAX_MISSING_RATIO: float = 0.20
+MIN_HAND_FRAMES_RATIO: float = 0.70
 
 # ──────────────────────────────────────────────
 # Feature Extraction Dimensions
@@ -64,3 +72,13 @@ HAND_DIM: int = HAND_LANDMARKS * 3  # (x, y, z)
 
 # Total features per frame = 132 + 63 + 63 = 258
 NUM_FEATURES: int = POSE_DIM + (HAND_DIM * 2)
+
+# ──────────────────────────────────────────────
+# Accuracy / Robustness Options
+# ──────────────────────────────────────────────
+NORMALIZE_LANDMARKS: bool = True
+AUGMENT_TRAINING_DATA: bool = True
+AUGMENTATION_COPIES: int = 2
+AUGMENT_NOISE_STD: float = 0.01
+AUGMENT_SCALE_RANGE: tuple[float, float] = (0.95, 1.05)
+AUGMENT_TIME_SHIFT: int = 2
