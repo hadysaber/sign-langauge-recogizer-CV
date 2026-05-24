@@ -39,10 +39,10 @@ except ImportError as e:
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src.dataset import load_data
-from src.model import create_lstm_model
 from src.config import (
     MODEL_PATH, BEST_MODEL_PATH, ACTIONS,
-    PLOTS_DIR, METRICS_DIR
+    PLOTS_DIR, METRICS_DIR, MODEL_METADATA_PATH,
+    NORMALIZE_LANDMARKS
 )
 
 
@@ -111,8 +111,8 @@ def evaluate() -> None:
     logger.info("=" * 60)
 
     # ── 1. Load Dataset ──
-    logger.info("Loading dataset (using the same train/test split)...")
-    _, X_test, _, y_test = load_data()
+    logger.info("Loading dataset (using the final untouched test split)...")
+    _, _, X_test, _, _, y_test = load_data(augment_train=False)
     logger.info(f"Test set: {X_test.shape[0]} samples")
 
     # ── 2. Load Model ──
@@ -126,8 +126,20 @@ def evaluate() -> None:
         sys.exit(1)
 
     logger.info(f"Loading model from → {model_path}")
-    model = create_lstm_model()
-    model.load_weights(str(model_path))
+    model = tf.keras.models.load_model(str(model_path))
+    if MODEL_METADATA_PATH.exists():
+        with open(MODEL_METADATA_PATH, 'r') as f:
+            metadata = json.load(f)
+        if metadata.get("normalize_landmarks") != NORMALIZE_LANDMARKS:
+            logger.warning(
+                "Model preprocessing metadata differs from current config. "
+                "Retrain before trusting this evaluation."
+            )
+    else:
+        logger.warning(
+            "Model metadata is missing. Retrain before trusting this evaluation "
+            "with the current preprocessing settings."
+        )
 
     # ── 3. Generate Predictions ──
     logger.info("Running inference on test set...")

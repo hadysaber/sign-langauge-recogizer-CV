@@ -5,7 +5,7 @@ Defines the machine learning architecture.
 import sys
 from pathlib import Path
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.layers import Input, Masking, LSTM, Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -34,14 +34,16 @@ def create_lstm_model(learning_rate: float = 0.001) -> Model:
 
     # Input block: sequences of shape (SEQUENCE_LENGTH, NUM_FEATURES)
     # Using default tanh activation (NOT relu — relu causes gradient explosions in LSTMs)
-    model.add(LSTM(64, return_sequences=True, input_shape=(SEQUENCE_LENGTH, NUM_FEATURES)))
-    model.add(Dropout(0.3))
+    model.add(Input(shape=(SEQUENCE_LENGTH, NUM_FEATURES)))
+    model.add(Masking(mask_value=0.0))
+    model.add(LSTM(96, return_sequences=True))
+    model.add(Dropout(0.35))
     model.add(LSTM(64, return_sequences=False))
-    model.add(Dropout(0.3))
+    model.add(Dropout(0.30))
 
     # Dense classification block
-    model.add(Dense(32, activation='relu'))
-    model.add(Dropout(0.2))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dropout(0.25))
     model.add(Dense(len(ACTIONS), activation='softmax'))
 
     # Compile with Adam optimizer at the specified learning rate

@@ -25,7 +25,7 @@ try:
     import matplotlib.pyplot as plt
     import tensorflow as tf
     from tensorflow.keras.callbacks import (
-        TensorBoard, EarlyStopping, ModelCheckpoint
+        TensorBoard, EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
     )
 except ImportError as e:
     logger.error(
@@ -40,8 +40,10 @@ from src.dataset import load_data, save_label_mapping
 from src.model import create_lstm_model
 from src.config import (
     MODEL_PATH, BEST_MODEL_PATH, LOG_DIR, HISTORY_PATH,
-    PLOTS_DIR, ACTIONS, LABEL_MAP_PATH,
-    EPOCHS, BATCH_SIZE, LEARNING_RATE, ES_PATIENCE
+    PLOTS_DIR, ACTIONS, LABEL_MAP_PATH, MODEL_METADATA_PATH,
+    EPOCHS, BATCH_SIZE, LEARNING_RATE, ES_PATIENCE, LR_PATIENCE,
+    VALIDATION_SIZE, TEST_SIZE, RANDOM_SEED, NORMALIZE_LANDMARKS,
+    AUGMENT_TRAINING_DATA, AUGMENTATION_COPIES
 )
 
 
@@ -101,6 +103,25 @@ def save_training_history(history: dict) -> Path:
     return HISTORY_PATH
 
 
+def save_model_metadata(test_loss: float, test_acc: float) -> Path:
+    """Saves training/preprocessing settings needed for reliable inference."""
+    metadata = {
+        "saved_at": datetime.now().isoformat(),
+        "actions": ACTIONS,
+        "normalize_landmarks": NORMALIZE_LANDMARKS,
+        "augmentation_enabled": AUGMENT_TRAINING_DATA,
+        "augmentation_copies": AUGMENTATION_COPIES,
+        "validation_size": VALIDATION_SIZE,
+        "test_size": TEST_SIZE,
+        "holdout_test_loss": round(float(test_loss), 4),
+        "holdout_test_accuracy": round(float(test_acc), 4),
+    }
+    with open(MODEL_METADATA_PATH, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    logger.info(f"Model metadata saved → {MODEL_METADATA_PATH}")
+    return MODEL_METADATA_PATH
+
+
 # ──────────────────────────────────────────────
 # Main Training Function
 # ──────────────────────────────────────────────
@@ -124,12 +145,14 @@ def train() -> None:
     logger.info(f"  Batch size:      {BATCH_SIZE}")
     logger.info(f"  Learning rate:   {LEARNING_RATE}")
     logger.info(f"  Early stopping:  patience={ES_PATIENCE}")
+    logger.info(f"  Split:           val={VALIDATION_SIZE}, test={TEST_SIZE}")
     logger.info(f"  Classes:         {ACTIONS}")
+    tf.keras.utils.set_random_seed(RANDOM_SEED)
 
     # ── 2. Load Dataset ──
     logger.info("-" * 60)
     logger.info("Loading dataset...")
-    X_train, X_test, y_train, y_test = load_data()
+    X_train, X_val, X_test, y_train, y_val, y_test = load_data()
 
     # ── 3. Save Label Mapping ──
     save_label_mapping()
@@ -144,15 +167,22 @@ def train() -> None:
     callbacks = [
         ModelCheckpoint(
             filepath=str(BEST_MODEL_PATH),
-            monitor='val_categorical_accuracy',
+            monitor='val_loss',
             save_best_only=True,
-            mode='max',
+            mode='min',
             verbose=1
         ),
         EarlyStopping(
             monitor='val_loss',
             patience=ES_PATIENCE,
             restore_best_weights=True,
+            verbose=1
+        ),
+        ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=LR_PATIENCE,
+            min_lr=1e-5,
             verbose=1
         ),
         TensorBoard(log_dir=str(LOG_DIR))
@@ -163,12 +193,14 @@ def train() -> None:
     logger.info("Starting training...")
     history = model.fit(
         X_train, y_train,
-        validation_data=(X_test, y_test),
+        validation_data=(X_val, y_val),
         epochs=EPOCHS,
         batch_size=BATCH_SIZE,
         callbacks=callbacks,
         verbose=1
     )
+
+    test_loss, test_acc = model.evaluate(X_test, y_test, verbose=0)
 
     # ── 7. Save Final Model ──
     logger.info("-" * 60)
@@ -178,6 +210,7 @@ def train() -> None:
     # ── 8. Save History & Plots ──
     save_training_history(history.history)
     save_training_plots(history.history)
+    save_model_metadata(test_loss, test_acc)
 
     # ── 9. Done ──
     logger.info("=" * 60)
@@ -185,12 +218,15 @@ def train() -> None:
     final_val_loss = history.history['val_loss'][-1]
     logger.info(f"Training complete!")
     logger.info(f"  Best val accuracy: {best_val_acc:.4f}")
+    logger.info(f"  Holdout test acc:  {test_acc:.4f}")
+    logger.info(f"  Holdout test loss: {test_loss:.4f}")
     logger.info(f"  Final val loss:    {final_val_loss:.4f}")
     logger.info(f"  Epochs completed:  {len(history.history['loss'])}")
     logger.info(f"Outputs:")
     logger.info(f"  Final model   → {MODEL_PATH}")
     logger.info(f"  Best model    → {BEST_MODEL_PATH}")
     logger.info(f"  Label mapping → {LABEL_MAP_PATH}")
+    logger.info(f"  Metadata      → {MODEL_METADATA_PATH}")
     logger.info(f"  History JSON  → {HISTORY_PATH}")
     logger.info(f"  Accuracy plot → {PLOTS_DIR / 'accuracy.png'}")
     logger.info(f"  Loss plot     → {PLOTS_DIR / 'loss.png'}")

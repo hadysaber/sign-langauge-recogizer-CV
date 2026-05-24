@@ -19,6 +19,7 @@ MODEL_DIR: Path = PROJECT_ROOT / "models"
 MODEL_PATH: Path = MODEL_DIR / "sign_model.keras"
 BEST_MODEL_PATH: Path = MODEL_DIR / "sign_model_best.keras"
 LABEL_MAP_PATH: Path = MODEL_DIR / "label_mapping.json"
+MODEL_METADATA_PATH: Path = MODEL_DIR / "model_metadata.json"
 LOG_DIR: Path = MODEL_DIR / "Logs"
 
 # Report output paths
@@ -57,7 +58,7 @@ LR_PATIENCE: int = 6           # reduce learning rate after stagnant validation 
 # Video / Sequence Configuration
 # ──────────────────────────────────────────────
 SEQUENCE_LENGTH: int = 30      # 30 frames of sequence buffer
-NO_SEQUENCES: int = 30         # videos per action (recommend 40+ for better accuracy)
+NO_SEQUENCES: int = 60         # videos per action (60+ recommended for better accuracy)
 MAX_MISSING_RATIO: float = 0.20
 MIN_HAND_FRAMES_RATIO: float = 0.70
 

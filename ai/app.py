@@ -20,9 +20,13 @@ import json
 from collections import deque
 from pathlib import Path
 
-from src.config import ACTIONS, MODEL_PATH, CONFIDENCE_THRESHOLD, SEQUENCE_LENGTH, LABEL_MAP_PATH
+from src.config import (
+    ACTIONS, MODEL_PATH, BEST_MODEL_PATH, CONFIDENCE_THRESHOLD,
+    SEQUENCE_LENGTH, LABEL_MAP_PATH, MODEL_METADATA_PATH,
+    NORMALIZE_LANDMARKS
+)
+from src.dataset import normalize_sequence
 from src.extract import mp_holistic, mediapipe_detection, extract_keypoints
-from src.model import create_lstm_model
 from src.ui import draw_styled_landmarks, draw_presentation_overlay
 from src.smoothing import PredictionSmoother
 
@@ -47,19 +51,37 @@ def on_screen_prediction() -> None:
         logging.info("No label mapping found — model has not been trained yet.")
 
     # 2. Initialize and Load LSTM Model
-    model = create_lstm_model()
-    if Path(MODEL_PATH).exists():
+    model_path = BEST_MODEL_PATH if Path(BEST_MODEL_PATH).exists() else MODEL_PATH
+    if Path(model_path).exists():
         try:
-            model.load_weights(str(MODEL_PATH))
-            logging.info("Model loaded successfully.")
+            model = tf.keras.models.load_model(str(model_path))
+            logging.info(f"Model loaded successfully from {model_path}.")
         except ValueError as e:
             logging.error(
-                f"Model weight mismatch (likely different number of classes): {e}. "
+                f"Model mismatch (likely different number of classes): {e}. "
                 f"Retrain with 'python src/train.py'."
             )
             return
     else:
-        logging.warning(f"File not found at '{MODEL_PATH}'. Running with uninitialized random weights.")
+        logging.error(
+            f"No trained model found at '{BEST_MODEL_PATH}' or '{MODEL_PATH}'. "
+            "Run 'python src/train.py' first."
+        )
+        return
+
+    if MODEL_METADATA_PATH.exists():
+        with open(MODEL_METADATA_PATH, 'r') as f:
+            metadata = json.load(f)
+        if metadata.get("normalize_landmarks") != NORMALIZE_LANDMARKS:
+            logging.warning(
+                "Model preprocessing metadata differs from current config. "
+                "Retrain with 'python src/train.py' before judging accuracy."
+            )
+    else:
+        logging.warning(
+            "Model metadata is missing. Retrain with 'python src/train.py' "
+            "so inference uses a model matched to the current preprocessing."
+        )
         
     # 2. Setup Temporal Buffers & State Mechanics
     sequence = deque(maxlen=SEQUENCE_LENGTH) 
@@ -111,7 +133,10 @@ def on_screen_prediction() -> None:
                     status_text = "Predicting"
                     
                     # Shape context: (1, 30, 258)
-                    res = model.predict(np.expand_dims(list(sequence), axis=0), verbose=0)[0]
+                    model_input = np.array(list(sequence), dtype=np.float32)
+                    if NORMALIZE_LANDMARKS:
+                        model_input = normalize_sequence(model_input)
+                    res = model.predict(np.expand_dims(model_input, axis=0), verbose=0)[0]
                     prediction_idx = int(np.argmax(res))
                     
                     if res[prediction_idx] > CONFIDENCE_THRESHOLD:
