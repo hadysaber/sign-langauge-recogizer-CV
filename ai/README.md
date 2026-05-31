@@ -137,6 +137,41 @@ s - toggle prediction smoothing
 
 The app loads `models/sign_model_best.keras` when available, applies the same normalization used during training, and warns if model metadata does not match the current config.
 
+### 6. Local Backend API
+
+Run the FastAPI backend used by the future mobile app:
+
+```powershell
+.venv\Scripts\python.exe -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+Health check:
+
+```text
+GET http://localhost:8000/health
+```
+
+Prediction endpoint:
+
+```text
+POST http://localhost:8000/api/v1/predict
+multipart/form-data field name: frame
+```
+
+The prediction endpoint accepts one image frame at a time. It keeps a rolling
+30-frame sequence buffer on the backend, extracts MediaPipe landmarks, applies
+the same normalization as training, runs the Keras model, smooths predictions,
+and returns:
+
+```json
+{
+  "label": "hello",
+  "confidence": 0.94,
+  "stable": true,
+  "history": ["hello"]
+}
+```
+
 ## Configuration
 
 Edit `src/config.py` before collecting or training.
@@ -189,6 +224,18 @@ ai/
 |   |-- smoothing.py
 |   |-- train.py
 |   `-- ui.py
+|-- api/
+|   |-- main.py
+|   |-- routes/
+|   |   `-- prediction_routes.py
+|   |-- services/
+|   |   `-- recognition_service.py
+|   |-- schemas/
+|   |   `-- prediction_schema.py
+|   |-- core/
+|   |   `-- settings.py
+|   `-- utils/
+|       `-- image_utils.py
 |-- data/
 |   |-- raw/
 |   `-- extracted/
